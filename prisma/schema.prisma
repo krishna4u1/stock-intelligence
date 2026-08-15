@@ -1,0 +1,180 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Stock {
+  id        String   @id @default(cuid())
+  symbol    String   @unique
+  name      String
+  sector    String
+  industry  String
+  isFno     Boolean  @default(false)
+  exchange  String   @default("NSE")
+  marketCap String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  prices        Price[]
+  fundamentals  Fundamental[]
+  shareholding  Shareholding[]
+  signals       StockSignal[]
+  scores        ScoreRecord[]
+  alerts        Alert[]
+  holdings      PortfolioHolding[]
+  watchlistItems WatchlistItem[]
+}
+
+model Price {
+  id         String   @id @default(cuid())
+  stockId    String
+  date       DateTime
+  open       Float
+  high       Float
+  low        Float
+  close      Float
+  volume     BigInt
+  stock      Stock    @relation(fields: [stockId], references: [id])
+  @@index([stockId, date])
+}
+
+model Fundamental {
+  id                 String   @id @default(cuid())
+  stockId            String
+  quarter            String
+  revenueGrowthYoY   Float
+  patGrowthYoY       Float
+  roe                Float
+  roce               Float
+  pe                 Float
+  pb                 Float
+  debtToEquity       Float
+  promoterHolding    Float
+  promoterPledge     Float
+  operatingCashFlow  Float
+  freeCashFlow       Float
+  reportedAt         DateTime
+  stock              Stock    @relation(fields: [stockId], references: [id])
+  @@index([stockId, quarter])
+}
+
+model Shareholding {
+  id          String   @id @default(cuid())
+  stockId     String
+  quarter     String
+  fiiHolding  Float
+  mfHolding   Float
+  diiHolding  Float
+  retailHolding Float
+  reportedAt  DateTime
+  stock       Stock    @relation(fields: [stockId], references: [id])
+  @@index([stockId, quarter])
+}
+
+model StockSignal {
+  id            String   @id @default(cuid())
+  stockId       String
+  rating        String
+  signalScore   Int
+  confidence    Int
+  entry         Json
+  tags          Json
+  reasons       Json
+  createdAt     DateTime @default(now())
+  stock         Stock    @relation(fields: [stockId], references: [id])
+  @@index([stockId, createdAt])
+}
+
+model ScoreRecord {
+  id          String   @id @default(cuid())
+  stockId     String
+  date        DateTime
+  total       Int
+  fundamental Int
+  institutional Int
+  technical   Int
+  fno         Int
+  sectorMacro Int
+  riskEvent   Int
+  changes     Json
+  stock       Stock    @relation(fields: [stockId], references: [id])
+  @@index([stockId, date])
+}
+
+model MarketData {
+  id               String   @id @default(cuid())
+  date             DateTime @unique
+  nifty50          Float
+  sensex           Float
+  bankNifty        Float
+  indiaVix         Float
+  fiiFlow          Float
+  diiFlow          Float
+  advanceDeclineRatio Float
+  regime           String
+}
+
+model User {
+  id         String   @id @default(cuid())
+  email      String   @unique
+  name       String?
+  createdAt  DateTime @default(now())
+  watchlists Watchlist[]
+  portfolios Portfolio[]
+  alerts     Alert[]
+}
+
+model Watchlist {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+  items     WatchlistItem[]
+}
+
+model WatchlistItem {
+  id          String   @id @default(cuid())
+  watchlistId String
+  stockId     String
+  addedAt     DateTime @default(now())
+  watchlist   Watchlist @relation(fields: [watchlistId], references: [id])
+  stock       Stock    @relation(fields: [stockId], references: [id])
+}
+
+model Portfolio {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+  holdings  PortfolioHolding[]
+}
+
+model PortfolioHolding {
+  id          String   @id @default(cuid())
+  portfolioId String
+  stockId     String
+  qty         Float
+  avgPrice    Float
+  addedAt     DateTime @default(now())
+  portfolio   Portfolio @relation(fields: [portfolioId], references: [id])
+  stock       Stock    @relation(fields: [stockId], references: [id])
+}
+
+model Alert {
+  id        String   @id @default(cuid())
+  userId    String
+  stockId   String
+  type      String   // RATING_CHANGE, PRICE_TARGET, VOLUME_SURGE, etc.
+  condition Json
+  triggered Boolean  @default(false)
+  triggeredAt DateTime?
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id])
+  stock     Stock    @relation(fields: [stockId], references: [id])
+}
