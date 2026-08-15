@@ -241,6 +241,16 @@ export interface StockAnalysis {
 
 	scoreHistory: ScoreHistory[];
 	analysedAt: string;
+
+	/**
+	 * 'LIVE_TECHNICAL_ONLY' = price/technical are real (live provider), but
+	 * fundamental/institutional/fno/score/rating are NOT — no live provider
+	 * for those exists yet (see src/lib/providers/README.md). The zeroed
+	 * placeholder values in those fields must not be rendered as real data;
+	 * the UI checks this flag and shows an explicit "not available" state
+	 * instead. Omitted/undefined means 'FULL' (the original all-mock shape).
+	 */
+	dataMode?: 'FULL' | 'LIVE_TECHNICAL_ONLY';
 }
 
 export interface ScoreHistory {

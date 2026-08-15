@@ -33,6 +33,13 @@
 	$: cfg = stock ? ratingConfig(stock.rating) : null;
 	$: regimeCfg = stock ? regimeConfig(stock.marketRegime) : null;
 	$: pos52w = stock ? pct52wPosition(stock.technical.price, stock.technical.low52w, stock.technical.high52w) : 50;
+	// LIVE_TECHNICAL_ONLY: fundamentals/institutional/F&O/score are zeroed
+	// placeholders, not real data — see src/lib/providers/live-stock.ts.
+	$: liveOnly = stock?.dataMode === 'LIVE_TECHNICAL_ONLY';
+	// dataConfidence is bumped to 95+ only when the live Yahoo Finance overlay
+	// succeeds (src/routes/api/stocks/[symbol]/+server.ts) — reuse that as the
+	// live/mock signal instead of hardcoding "mock" for every stock.
+	$: priceDataLabel = stock && stock.dataConfidence >= 90 ? '🟢 Live (Yahoo Finance)' : '🟠 Delayed (mock)';
 </script>
 
 <svelte:head>
@@ -93,7 +100,11 @@
 
 				<!-- Tags row -->
 				<div class="flex flex-wrap gap-2 mt-4 pt-4 border-t border-terminal-border">
-					{#if cfg}
+					{#if liveOnly}
+						<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-bold bg-blue-400/10 text-blue-400 border border-blue-400/20">
+							🔵 LIVE DATA — no rating (fundamentals unavailable)
+						</span>
+					{:else if cfg}
 						<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-bold {cfg.bg} {cfg.color} {cfg.border} border">
 							{cfg.emoji} {cfg.label}
 						</span>
@@ -108,7 +119,7 @@
 				<!-- Key stats strip -->
 				<div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-8 gap-3 mt-4 pt-4 border-t border-terminal-border">
 					{#each [
-						{ label: 'Market Cap', value: `₹${(stock.fundamental.marketCap / 100).toFixed(0)} K Cr` },
+						{ label: 'Market Cap', value: liveOnly ? 'N/A' : `₹${(stock.fundamental.marketCap / 100).toFixed(0)} K Cr` },
 						{ label: 'Sector', value: stock.sector },
 						{ label: '52W High', value: `₹${formatNumber(stock.technical.high52w, 0)}` },
 						{ label: '52W Low', value: `₹${formatNumber(stock.technical.low52w, 0)}` },
@@ -155,6 +166,12 @@
 				/>
 
 				<!-- Fundamental data -->
+				{#if liveOnly}
+					<div class="card p-5 border-blue-400/20">
+						<h3 class="section-title">Fundamentals</h3>
+						<p class="text-xs text-terminal-muted">Not available — no live fundamentals provider is integrated yet. See <code class="text-terminal-secondary">providers/README.md</code>.</p>
+					</div>
+				{:else}
 				<div class="card p-5">
 					<h3 class="section-title">Fundamentals</h3>
 					<div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
@@ -193,8 +210,15 @@
 						</div>
 					</div>
 				</div>
+				{/if}
 
 				<!-- Institutional data -->
+				{#if liveOnly}
+					<div class="card p-5 border-blue-400/20">
+						<h3 class="section-title">Institutional Activity</h3>
+						<p class="text-xs text-terminal-muted">Not available — NSE's live shareholding/deals API is blocked by Akamai Bot Manager. See <code class="text-terminal-secondary">providers/README.md</code>.</p>
+					</div>
+				{:else}
 				<div class="card p-5">
 					<h3 class="section-title">Institutional Activity</h3>
 
@@ -256,6 +280,7 @@
 						</div>
 					{/if}
 				</div>
+				{/if}
 
 				<!-- Technical data -->
 				<div class="card p-5">
@@ -334,18 +359,20 @@
 					confidence={stock.dataConfidence}
 				/>
 
-				<!-- Score breakdown -->
-				<ScoreBreakdown score={stock.score} history={stock.scoreHistory} />
+				{#if !liveOnly}
+					<!-- Score breakdown -->
+					<ScoreBreakdown score={stock.score} history={stock.scoreHistory} />
 
-				<!-- Signal tags -->
-				<SignalTags tags={stock.tags} />
+					<!-- Signal tags -->
+					<SignalTags tags={stock.tags} />
 
-				<!-- Tier checklist -->
-				<TierChecklist
-					tier1={stock.tier1Checks}
-					tier2={stock.tier2Checks}
-					tier3={stock.tier3Checks}
-				/>
+					<!-- Tier checklist -->
+					<TierChecklist
+						tier1={stock.tier1Checks}
+						tier2={stock.tier2Checks}
+						tier3={stock.tier3Checks}
+					/>
+				{/if}
 
 				<!-- Data info -->
 				<div class="card p-4 text-xs text-terminal-muted space-y-1">
@@ -360,15 +387,15 @@
 					</div>
 					<div class="data-row text-xs">
 						<span>Quarterly Data</span>
-						<span class="font-mono">{stock.fundamental.quarterReported}</span>
+						<span class="font-mono">{liveOnly ? 'N/A' : stock.fundamental.quarterReported}</span>
 					</div>
 					<div class="data-row text-xs">
 						<span>Shareholding</span>
-						<span class="font-mono">Latest quarterly</span>
+						<span class="font-mono">{liveOnly ? 'N/A' : 'Latest quarterly'}</span>
 					</div>
 					<div class="data-row text-xs border-0">
 						<span>Price Data</span>
-						<span class="text-amber-400">🟠 Delayed (mock)</span>
+						<span class={stock.dataConfidence >= 90 ? 'text-emerald-400' : 'text-amber-400'}>{priceDataLabel}</span>
 					</div>
 				</div>
 			</div>

@@ -1,10 +1,23 @@
 import { json, error } from '@sveltejs/kit';
 import { getStock } from '$lib/providers/mock-data';
 import { getTechnicalSnapshot } from '$lib/providers/yahoo-finance';
+import { LIVE_ONLY_SYMBOLS, buildLiveOnlyAnalysis } from '$lib/providers/live-stock';
 
 export async function GET({ params, url }) {
-	const analysis = getStock(params.symbol);
-	if (!analysis) throw error(404, `Stock ${params.symbol} not found`);
+	const symbol = params.symbol.toUpperCase();
+	const analysis = getStock(symbol);
+
+	// Not in the mock dataset — check the live-only registry before 404ing.
+	if (!analysis) {
+		const liveMeta = LIVE_ONLY_SYMBOLS[symbol];
+		if (!liveMeta) throw error(404, `Stock ${symbol} not found`);
+		try {
+			return json(await buildLiveOnlyAnalysis(liveMeta));
+		} catch (err) {
+			console.error(`[stocks/${symbol}] live-only fetch failed:`, err);
+			throw error(502, `Live data fetch failed for ${symbol} — try again shortly`);
+		}
+	}
 
 	// Everything except `technical` (fundamentals, institutional, F&O, score,
 	// entry/exit) is still mock — see src/lib/providers/README.md. Price and
