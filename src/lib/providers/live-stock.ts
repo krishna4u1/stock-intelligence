@@ -67,6 +67,11 @@ export const LIVE_ONLY_SYMBOLS: Record<string, LiveSymbolMeta> = {
 		symbol: 'SBIN', name: 'State Bank of India',
 		sector: 'Financial Services', industry: 'Public Sector Bank',
 		exchange: 'NSE', marketCapType: 'LARGE', isFno: true
+	},
+	PARAS: {
+		symbol: 'PARAS', name: 'Paras Defence and Space Technologies Ltd',
+		sector: 'Capital Goods', industry: 'Aerospace & Defence Electronics',
+		exchange: 'NSE', marketCapType: 'SMALL', isFno: false
 	}
 };
 
