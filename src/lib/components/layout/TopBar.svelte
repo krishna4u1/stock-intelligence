@@ -6,17 +6,74 @@
 	export let market: MarketOverview | null = null;
 	export let title: string = '';
 
-	let searchQuery = '';
-	let searching = false;
+	interface SearchResult {
+		symbol: string;
+		name: string;
+	}
 
-	function handleSearch(e: KeyboardEvent) {
-		if (e.key === 'Enter' && searchQuery.trim()) {
-			window.location.href = `/stocks/${searchQuery.trim().toUpperCase()}`;
+	let searchQuery = '';
+	let results: SearchResult[] = [];
+	let open = false;
+	let highlighted = 0;
+	let debounceHandle: ReturnType<typeof setTimeout>;
+	let searchBoxEl: HTMLDivElement;
+
+	function runSearch(q: string) {
+		clearTimeout(debounceHandle);
+		if (!q.trim()) {
+			results = [];
+			open = false;
+			return;
+		}
+		debounceHandle = setTimeout(async () => {
+			try {
+				const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`);
+				results = res.ok ? await res.json() : [];
+			} catch {
+				results = [];
+			}
+			highlighted = 0;
+			open = results.length > 0;
+		}, 200);
+	}
+
+	function goToStock(symbol: string) {
+		open = false;
+		searchQuery = '';
+		results = [];
+		window.location.href = `/stocks/${symbol}`;
+	}
+
+	function handleKeydown(e: KeyboardEvent) {
+		if (e.key === 'ArrowDown') {
+			e.preventDefault();
+			if (results.length) highlighted = (highlighted + 1) % results.length;
+		} else if (e.key === 'ArrowUp') {
+			e.preventDefault();
+			if (results.length) highlighted = (highlighted - 1 + results.length) % results.length;
+		} else if (e.key === 'Enter') {
+			if (results[highlighted]) {
+				goToStock(results[highlighted].symbol);
+			} else if (searchQuery.trim()) {
+				// No search results yet (still debouncing, or a symbol the
+				// directory doesn't cover) — fall back to treating the input
+				// as a literal ticker, same as the old behavior.
+				goToStock(searchQuery.trim().toUpperCase());
+			}
+		} else if (e.key === 'Escape') {
+			open = false;
 		}
 	}
 
+	function handleClickOutside(e: MouseEvent) {
+		if (searchBoxEl && !searchBoxEl.contains(e.target as Node)) open = false;
+	}
+
 	$: regime = market ? regimeConfig(market.regime) : null;
+	$: runSearch(searchQuery);
 </script>
+
+<svelte:window on:click={handleClickOutside} />
 
 <header class="sticky top-0 z-30 flex h-14 items-center gap-4 border-b border-terminal-border bg-terminal-surface/90 backdrop-blur-sm px-6">
 	<!-- Page title -->
@@ -60,15 +117,32 @@
 	{/if}
 
 	<!-- Search -->
-	<div class="relative w-52">
+	<div class="relative w-64" bind:this={searchBoxEl}>
 		<Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-terminal-muted" />
 		<input
 			type="text"
-			placeholder="Search stocks (e.g. RELIANCE)"
+			placeholder="Search stocks by name or symbol"
 			bind:value={searchQuery}
-			on:keydown={handleSearch}
+			on:keydown={handleKeydown}
+			on:focus={() => (open = results.length > 0)}
 			class="w-full rounded-md border border-terminal-border bg-terminal-card py-1.5 pl-8 pr-3 text-xs text-terminal-primary placeholder:text-terminal-muted focus:border-emerald-400/50 focus:outline-none focus:ring-1 focus:ring-emerald-400/20 transition-all"
 		/>
+
+		{#if open && results.length}
+			<div class="absolute left-0 right-0 mt-1 rounded-md border border-terminal-border bg-terminal-card shadow-lg overflow-hidden z-40">
+				{#each results as r, i}
+					<button
+						type="button"
+						class="w-full text-left px-3 py-2 text-xs flex items-center justify-between gap-2 transition-colors {i === highlighted ? 'bg-terminal-hover' : ''}"
+						on:mouseenter={() => (highlighted = i)}
+						on:click={() => goToStock(r.symbol)}
+					>
+						<span class="font-mono font-semibold text-terminal-primary">{r.symbol}</span>
+						<span class="text-terminal-muted truncate">{r.name}</span>
+					</button>
+				{/each}
+			</div>
+		{/if}
 	</div>
 
 	<!-- Notifications -->

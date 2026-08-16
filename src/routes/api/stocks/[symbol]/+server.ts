@@ -1,15 +1,16 @@
 import { json, error } from '@sveltejs/kit';
 import { getStock } from '$lib/providers/mock-data';
 import { getTechnicalSnapshot } from '$lib/providers/yahoo-finance';
-import { LIVE_ONLY_SYMBOLS, buildLiveOnlyAnalysis } from '$lib/providers/live-stock';
+import { resolveLiveOnlyMeta, buildLiveOnlyAnalysis } from '$lib/providers/live-stock';
 
 export async function GET({ params, url }) {
 	const symbol = params.symbol.toUpperCase();
 	const analysis = getStock(symbol);
 
-	// Not in the mock dataset — check the live-only registry before 404ing.
+	// Not in the mock dataset — resolve against the live-only registry, then
+	// (dynamically) the whole NSE symbol directory, before 404ing.
 	if (!analysis) {
-		const liveMeta = LIVE_ONLY_SYMBOLS[symbol];
+		const liveMeta = await resolveLiveOnlyMeta(symbol);
 		if (!liveMeta) throw error(404, `Stock ${symbol} not found`);
 		try {
 			return json(await buildLiveOnlyAnalysis(liveMeta));

@@ -13,6 +13,8 @@ import { nseFetchBinary } from './http';
 
 export interface EquityBhavcopyRow {
 	symbol: string;
+	/** Company/instrument name (UDiFF's FinInstrmNm). Empty on legacy pre-2024-07-08 files, which don't carry this column. */
+	name: string;
 	series: string;
 	open: number;
 	high: number;
@@ -61,6 +63,7 @@ function parseEquityBhavcopyCsv(csv: string): EquityBhavcopyRow[] {
 
 		return {
 			symbol: col(row, 'TckrSymb', 'SYMBOL'),
+			name: col(row, 'FinInstrmNm'),
 			series: col(row, 'SctySrs', 'SERIES'),
 			open: Number(col(row, 'OpnPric', 'OPEN')) || 0,
 			high: Number(col(row, 'HghPric', 'HIGH')) || 0,

@@ -17,6 +17,7 @@
  */
 import type { StockAnalysis, FundamentalData, InstitutionalData, EntryTargetData, MarketCap } from '../types';
 import { getTechnicalSnapshot, type YahooExchange } from './yahoo-finance';
+import { getSymbolDirectory } from './nse/symbols';
 
 export interface LiveSymbolMeta {
 	symbol: string;
@@ -63,6 +64,37 @@ export const LIVE_ONLY_SYMBOLS: Record<string, LiveSymbolMeta> = {
 		exchange: 'NSE', marketCapType: 'SMALL', isFno: false
 	}
 };
+
+/**
+ * Resolves live-only metadata for a symbol: the curated registry above
+ * (real sector/industry/marketCap classification) if we have it, otherwise
+ * falls back to the NSE symbol directory (nse/symbols.ts, sourced from
+ * bhavcopy) for just enough to confirm the symbol is real and get its name.
+ * This is what lets the search box (which searches that same directory,
+ * i.e. the whole NSE equity universe) not dead-end into a 404 on click for
+ * anything outside the curated 5.
+ */
+export async function resolveLiveOnlyMeta(symbol: string): Promise<LiveSymbolMeta | null> {
+	const curated = LIVE_ONLY_SYMBOLS[symbol];
+	if (curated) return curated;
+
+	try {
+		const dir = await getSymbolDirectory();
+		const found = dir.find((e) => e.symbol === symbol);
+		if (!found) return null;
+		return {
+			symbol: found.symbol,
+			name: found.name,
+			sector: 'Unknown',
+			industry: 'Unknown',
+			exchange: 'NSE',
+			marketCapType: 'MID', // best-effort default — no live market-cap source is wired up yet
+			isFno: false
+		};
+	} catch {
+		return null; // directory fetch failed — let the caller 404 rather than hang
+	}
+}
 
 const EMPTY_FUNDAMENTAL: FundamentalData = {
 	revenueGrowthYoY: 0, revenueGrowthQoQ: 0, patGrowthYoY: 0, ebitdaGrowthYoY: 0, epsGrowthYoY: 0,
@@ -151,7 +183,10 @@ export async function buildLiveOnlyAnalysis(meta: LiveSymbolMeta): Promise<Stock
 			'Fundamentals (revenue/PAT growth, ROE, PE, promoter holding) — no live provider integrated yet',
 			'Institutional activity (FII/MF/DII, bulk/block deals) — NSE live API is blocked by Akamai Bot Manager (see providers/README.md)',
 			'F&O data — not available for this symbol',
-			"Rating/score not computed — the scoring engine needs fundamentals + institutional data this symbol doesn't have; price/technicals above are live"
+			"Rating/score not computed — the scoring engine needs fundamentals + institutional data this symbol doesn't have; price/technicals above are live",
+			...(meta.sector === 'Unknown'
+				? ["Sector/industry/market-cap classification — this symbol isn't in the curated registry (LIVE_ONLY_SYMBOLS), only confirmed real via the NSE symbol directory"]
+				: [])
 		],
 		eventRisks: [],
 
