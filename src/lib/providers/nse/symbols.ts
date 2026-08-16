@@ -7,7 +7,7 @@
  * per symbol, covers the whole NSE equity universe, and is already proven
  * working — so this reuses it instead of chasing another unverified path.)
  */
-import { downloadEquityBhavcopy, type EquityBhavcopyRow } from './bhavcopy';
+import { downloadEquityBhavcopy, withLatestTradingDayFallback } from './bhavcopy';
 
 export interface SymbolEntry {
 	symbol: string;
@@ -17,29 +17,10 @@ export interface SymbolEntry {
 let cache: { entries: SymbolEntry[]; fetchedAt: number } | null = null;
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000; // the listed-company set barely changes intraday
 
-/**
- * Bhavcopy is published per trading day and doesn't exist for
- * weekends/holidays/today-before-market-close. Walk backwards until one is
- * found rather than hardcoding "today".
- */
-async function fetchLatestBhavcopyWithFallback(maxDaysBack = 7): Promise<EquityBhavcopyRow[]> {
-	const today = new Date();
-	for (let i = 0; i < maxDaysBack; i++) {
-		const d = new Date(today);
-		d.setDate(d.getDate() - i);
-		try {
-			return await downloadEquityBhavcopy(d);
-		} catch {
-			// No file for this date — try the previous day.
-		}
-	}
-	throw new Error(`No NSE bhavcopy found in the last ${maxDaysBack} days`);
-}
-
 export async function getSymbolDirectory(): Promise<SymbolEntry[]> {
 	if (cache && Date.now() - cache.fetchedAt < CACHE_TTL_MS) return cache.entries;
 
-	const rows = await fetchLatestBhavcopyWithFallback();
+	const rows = await withLatestTradingDayFallback(downloadEquityBhavcopy);
 	const entries = rows
 		.filter((r) => r.series === 'EQ') // common equity only — skips SGBs/ETFs/preference shares etc.
 		.map((r) => ({ symbol: r.symbol, name: r.name || r.symbol }));

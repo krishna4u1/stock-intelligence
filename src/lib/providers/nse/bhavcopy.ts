@@ -88,13 +88,76 @@ export async function downloadEquityBhavcopy(date: Date): Promise<EquityBhavcopy
 	return parseEquityBhavcopyCsv(extractSingleCsv(zipBuffer));
 }
 
-/** Same format, F&O segment (futures + options full-market dump). */
-export async function downloadFnoBhavcopy(date: Date): Promise<string> {
+export interface FnoBhavcopyRow {
+	symbol: string;
+	/** 'STF' = single-stock futures, 'STO' = single-stock options, 'IDF'/'IDO' = index variants. */
+	instrumentType: string;
+	expiryDate: string;
+	/** 0 for futures rows. */
+	strikePrice: number;
+	/** 'CE' | 'PE' for options, '' for futures. */
+	optionType: string;
+	close: number;
+	prevClose: number;
+	/** Cash-market spot price NSE stamped on this contract's row — the equity bhavcopy close for the same symbol/day should roughly match. */
+	underlyingPrice: number;
+	openInterest: number;
+	/** Absolute contract-count delta from previous day (verified live — NOT a percentage), despite FnoData.futuresOIChange downstream being a %. */
+	changeInOpenInterest: number;
+	volume: number;
+}
+
+function parseFnoBhavcopyCsv(csv: string): FnoBhavcopyRow[] {
+	const lines = csv.trim().split(/\r?\n/);
+	if (lines.length < 2) return [];
+	const headers = lines[0].split(',').map((h) => h.trim());
+
+	return lines.slice(1).map((line) => {
+		const cells = line.split(',');
+		const row: Record<string, string> = {};
+		headers.forEach((h, i) => (row[h] = (cells[i] ?? '').trim()));
+
+		return {
+			symbol: row['TckrSymb'] ?? '',
+			instrumentType: row['FinInstrmTp'] ?? '',
+			expiryDate: row['XpryDt'] ?? '',
+			strikePrice: Number(row['StrkPric']) || 0,
+			optionType: row['OptnTp'] ?? '',
+			close: Number(row['ClsPric']) || 0,
+			prevClose: Number(row['PrvsClsgPric']) || 0,
+			underlyingPrice: Number(row['UndrlygPric']) || 0,
+			openInterest: Number(row['OpnIntrst']) || 0,
+			changeInOpenInterest: Number(row['ChngInOpnIntrst']) || 0,
+			volume: Number(row['TtlTradgVol']) || 0
+		} satisfies FnoBhavcopyRow;
+	}).filter((r) => r.symbol);
+}
+
+/** Same UDiFF format, F&O segment (futures + options full-market dump, all symbols/expiries/strikes for one day). */
+export async function downloadFnoBhavcopy(date: Date): Promise<FnoBhavcopyRow[]> {
 	const ds = formatBhavcopyDate(date);
 	const zipBuffer = await nseFetchBinary(`/content/fo/BhavCopy_NSE_FO_0_0_0_${ds}_F_0000.csv.zip`);
-	// Returned as raw CSV text rather than parsed rows: the F&O bhavcopy's
-	// columns (instrument, expiry, strike, option type, OI, ...) don't map
-	// onto a single shared row shape the way the equity one does — parse
-	// per-field as needed at the call site.
-	return extractSingleCsv(zipBuffer);
+	return parseFnoBhavcopyCsv(extractSingleCsv(zipBuffer));
+}
+
+/**
+ * Bhavcopy is published per trading day and doesn't exist for
+ * weekends/holidays/today-before-market-close. Walks backwards from today
+ * until `fetchFn` succeeds, rather than assuming "today" has a file.
+ */
+export async function withLatestTradingDayFallback<T>(
+	fetchFn: (date: Date) => Promise<T>,
+	maxDaysBack = 7
+): Promise<T> {
+	const today = new Date();
+	for (let i = 0; i < maxDaysBack; i++) {
+		const d = new Date(today);
+		d.setDate(d.getDate() - i);
+		try {
+			return await fetchFn(d);
+		} catch {
+			// No file for this date — try the previous day.
+		}
+	}
+	throw new Error(`No NSE bhavcopy found in the last ${maxDaysBack} days`);
 }

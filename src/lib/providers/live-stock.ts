@@ -18,6 +18,7 @@
 import type { StockAnalysis, FundamentalData, InstitutionalData, EntryTargetData, MarketCap } from '../types';
 import { getTechnicalSnapshot, type YahooExchange } from './yahoo-finance';
 import { getSymbolDirectory } from './nse/symbols';
+import { getFnoSnapshot } from './nse/fno-snapshot';
 
 export interface LiveSymbolMeta {
 	symbol: string;
@@ -49,9 +50,16 @@ export const LIVE_ONLY_SYMBOLS: Record<string, LiveSymbolMeta> = {
 		exchange: 'NSE', marketCapType: 'MID', isFno: false
 	},
 	KAYNES: {
+		// isFno corrected 2026-08-16: verified live against F&O bhavcopy —
+		// KAYNES has 151 active futures+options contracts. Originally set to
+		// false without checking when this entry was first added. While
+		// fixing this, also verified every other isFno flag below against
+		// the same bhavcopy: ASTRAMICRO/SYRMA/LEAPIND/DAMCAPITAL all have 0
+		// F&O contracts, so false was already correct for those. (BELRISE,
+		// in mock-data.ts, was checked too — also correctly 0.)
 		symbol: 'KAYNES', name: 'Kaynes Technology India Ltd',
 		sector: 'Consumer Durables', industry: 'Electronics Manufacturing Services',
-		exchange: 'NSE', marketCapType: 'MID', isFno: false
+		exchange: 'NSE', marketCapType: 'MID', isFno: true
 	},
 	LEAPIND: {
 		symbol: 'LEAPIND', name: 'Leap India Ltd',
@@ -160,6 +168,24 @@ export async function buildLiveOnlyAnalysis(meta: LiveSymbolMeta): Promise<Stock
 	const liveTechnical = await getTechnicalSnapshot(meta.symbol, meta.exchange);
 	const technical: StockAnalysis['technical'] = { ...liveTechnical, relativeStrengthVsSector3M: 0 };
 
+	// F&O bhavcopy is unaffected by the Akamai block (separate, unprotected
+	// host) — real for any symbol that actually has contracts. Failure here
+	// (network hiccup, bhavcopy not yet published) degrades to the "not
+	// available" message below rather than failing the whole page.
+	let fno: StockAnalysis['fno'];
+	let fnoMissingDataNote = 'F&O data — not available for this symbol';
+	if (meta.isFno) {
+		try {
+			const snapshot = await getFnoSnapshot(meta.symbol);
+			if (snapshot) {
+				fno = snapshot;
+				fnoMissingDataNote = 'F&O implied-volatility percentile — needs a historical IV time series a single day\'s bhavcopy can\'t provide (rest of F&O data above is live)';
+			}
+		} catch (err) {
+			console.warn(`[live-stock] F&O bhavcopy fetch failed for ${meta.symbol}, showing without F&O data:`, err);
+		}
+	}
+
 	return {
 		symbol: meta.symbol,
 		name: meta.name,
@@ -178,7 +204,7 @@ export async function buildLiveOnlyAnalysis(meta: LiveSymbolMeta): Promise<Stock
 		fundamental: EMPTY_FUNDAMENTAL,
 		institutional: EMPTY_INSTITUTIONAL,
 		technical,
-		fno: undefined,
+		fno,
 		entry: buildLiveOnlyEntryTarget(technical),
 
 		tags: [],
@@ -192,7 +218,7 @@ export async function buildLiveOnlyAnalysis(meta: LiveSymbolMeta): Promise<Stock
 		missingData: [
 			'Fundamentals (revenue/PAT growth, ROE, PE, promoter holding) — no live provider integrated yet',
 			'Institutional activity (FII/MF/DII, bulk/block deals) — NSE live API is blocked by Akamai Bot Manager (see providers/README.md)',
-			'F&O data — not available for this symbol',
+			fnoMissingDataNote,
 			"Rating/score not computed — the scoring engine needs fundamentals + institutional data this symbol doesn't have; price/technicals above are live",
 			...(meta.sector === 'Unknown'
 				? ["Sector/industry/market-cap classification — this symbol isn't in the curated registry (LIVE_ONLY_SYMBOLS), only confirmed real via the NSE symbol directory"]
