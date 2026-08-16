@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/stores';
 	import type { StockAnalysis } from '$lib/types';
+	import type { DailyOrderFlowRow } from '$lib/providers/nse/delivery';
 	import {
 		ratingConfig, formatPct, formatNumber, changePctColor,
 		fnoConfig, pct52wPosition, regimeConfig
@@ -38,6 +39,26 @@
 	// param) — an onMount-only fetch would never refire there and the page
 	// would keep showing the previously selected stock under the new URL.
 	$: if (symbol) loadStock(symbol);
+
+	// Order flow loads independently — it's real for any symbol (mock or
+	// live-only, delivery-% data doesn't depend on fundamentals), and
+	// shouldn't block the main analysis from rendering while it fetches.
+	let orderFlow: DailyOrderFlowRow[] = [];
+	let orderFlowLoading = true;
+
+	async function loadOrderFlow(sym: string) {
+		orderFlowLoading = true;
+		orderFlow = [];
+		try {
+			const res = await fetch(`/api/stocks/${sym}/orderflow?days=10`);
+			if (res.ok) orderFlow = await res.json();
+		} catch {
+			// Non-critical — the card below shows its own "unavailable" state.
+		}
+		orderFlowLoading = false;
+	}
+	$: if (symbol) loadOrderFlow(symbol);
+	$: avgDeliveryPct = orderFlow.length ? orderFlow.reduce((sum, r) => sum + r.deliveryPct, 0) / orderFlow.length : 0;
 
 	$: cfg = stock ? ratingConfig(stock.rating) : null;
 	$: regimeCfg = stock ? regimeConfig(stock.marketRegime) : null;
@@ -340,6 +361,49 @@
 							<span class="text-emerald-400">🚀</span>
 							<span class="text-emerald-300">Active breakout above ₹{formatNumber(stock.technical.breakoutLevel, 0)}</span>
 						</div>
+					{/if}
+				</div>
+
+				<!-- Order flow (delivery-based) -->
+				<div class="card p-5">
+					<div class="flex items-center justify-between mb-4">
+						<h3 class="section-title mb-0 border-0 pb-0">Order Flow — Last 10 Days</h3>
+						{#if orderFlow.length}
+							<span class="text-[11px] text-terminal-muted">Avg delivery {avgDeliveryPct.toFixed(1)}%</span>
+						{/if}
+					</div>
+					{#if orderFlowLoading}
+						<div class="text-center text-terminal-muted text-sm py-6">Loading...</div>
+					{:else if orderFlow.length === 0}
+						<p class="text-xs text-terminal-muted">Not available for this symbol right now.</p>
+					{:else}
+						<div class="overflow-x-auto">
+							<table class="w-full text-xs">
+								<thead>
+									<tr class="text-terminal-muted border-b border-terminal-border">
+										<th class="text-left font-normal py-1.5">Date</th>
+										<th class="text-right font-normal py-1.5">Close</th>
+										<th class="text-right font-normal py-1.5">Chg %</th>
+										<th class="text-right font-normal py-1.5">Volume</th>
+										<th class="text-right font-normal py-1.5">Deliv Qty</th>
+										<th class="text-right font-normal py-1.5">Deliv %</th>
+									</tr>
+								</thead>
+								<tbody>
+									{#each [...orderFlow].reverse() as row}
+										<tr class="border-b border-terminal-border/50">
+											<td class="py-1.5 text-terminal-secondary font-mono">{new Date(row.date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}</td>
+											<td class="py-1.5 text-right font-mono text-terminal-primary">₹{formatNumber(row.close, 1)}</td>
+											<td class="py-1.5 text-right font-mono {changePctColor(row.changePct)}">{formatPct(row.changePct)}</td>
+											<td class="py-1.5 text-right font-mono text-terminal-secondary">{(row.volume / 100000).toFixed(1)}L</td>
+											<td class="py-1.5 text-right font-mono text-terminal-secondary">{(row.deliveryQty / 100000).toFixed(1)}L</td>
+											<td class="py-1.5 text-right font-mono font-semibold {row.deliveryPct >= 50 ? 'text-emerald-400' : row.deliveryPct >= 30 ? 'text-amber-400' : 'text-terminal-muted'}">{row.deliveryPct.toFixed(1)}%</td>
+										</tr>
+									{/each}
+								</tbody>
+							</table>
+						</div>
+						<p class="text-[10px] text-terminal-muted mt-3">Delivery % = share of the day's volume actually delivered (not squared off intraday) — higher delivery on a rising close suggests genuine accumulation rather than trading churn. Source: NSE daily delivery-position report.</p>
 					{/if}
 				</div>
 
