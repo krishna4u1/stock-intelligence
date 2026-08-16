@@ -42,9 +42,12 @@
 	$: cfg = stock ? ratingConfig(stock.rating) : null;
 	$: regimeCfg = stock ? regimeConfig(stock.marketRegime) : null;
 	$: pos52w = stock ? pct52wPosition(stock.technical.price, stock.technical.low52w, stock.technical.high52w) : 50;
-	// LIVE_TECHNICAL_ONLY: fundamentals/institutional/F&O/score are zeroed
-	// placeholders, not real data — see src/lib/providers/live-stock.ts.
-	$: liveOnly = stock?.dataMode === 'LIVE_TECHNICAL_ONLY';
+	// See src/lib/providers/live-stock.ts for what each dataMode actually
+	// means. undefined = 'FULL' (the original all-mock shape).
+	$: fundamentalsAvailable = stock?.dataMode !== 'LIVE_TECHNICAL_ONLY'; // real for 'FULL' and 'LIVE_FUNDAMENTALS'
+	$: institutionalAvailable = stock?.dataMode === undefined || stock?.dataMode === 'FULL'; // only true mock stocks
+	$: scoreAvailable = stock?.dataMode !== 'LIVE_TECHNICAL_ONLY'; // real for 'FULL' and 'LIVE_FUNDAMENTALS'
+	$: narrativeAvailable = stock?.dataMode === undefined || stock?.dataMode === 'FULL'; // hand-authored tags/tier-checks, mock-only
 	// dataConfidence is bumped to 95+ only when the live Yahoo Finance overlay
 	// succeeds (src/routes/api/stocks/[symbol]/+server.ts) — reuse that as the
 	// live/mock signal instead of hardcoding "mock" for every stock.
@@ -109,7 +112,7 @@
 
 				<!-- Tags row -->
 				<div class="flex flex-wrap gap-2 mt-4 pt-4 border-t border-terminal-border">
-					{#if liveOnly}
+					{#if !scoreAvailable}
 						<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-bold bg-blue-400/10 text-blue-400 border border-blue-400/20">
 							🔵 LIVE DATA — no rating (fundamentals unavailable)
 						</span>
@@ -117,6 +120,11 @@
 						<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-bold {cfg.bg} {cfg.color} {cfg.border} border">
 							{cfg.emoji} {cfg.label}
 						</span>
+						{#if stock.dataMode === 'LIVE_FUNDAMENTALS'}
+							<span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-blue-400/10 text-blue-400 border border-blue-400/20">
+								🔵 Live fundamentals — no institutional data factored in
+							</span>
+						{/if}
 					{/if}
 					{#each stock.tags.slice(0, 5) as tag}
 						<span class="text-xs px-2 py-1 rounded {tag.sentiment === 'BULLISH' ? 'bg-emerald-400/10 text-emerald-400' : tag.sentiment === 'BEARISH' ? 'bg-red-400/10 text-red-400' : 'bg-terminal-hover text-terminal-secondary'}">
@@ -128,7 +136,7 @@
 				<!-- Key stats strip -->
 				<div class="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-8 gap-3 mt-4 pt-4 border-t border-terminal-border">
 					{#each [
-						{ label: 'Market Cap', value: liveOnly ? 'N/A' : `₹${(stock.fundamental.marketCap / 100).toFixed(0)} K Cr` },
+						{ label: 'Market Cap', value: fundamentalsAvailable ? `₹${(stock.fundamental.marketCap / 100).toFixed(0)} K Cr` : 'N/A' },
 						{ label: 'Sector', value: stock.sector },
 						{ label: '52W High', value: `₹${formatNumber(stock.technical.high52w, 0)}` },
 						{ label: '52W Low', value: `₹${formatNumber(stock.technical.low52w, 0)}` },
@@ -175,10 +183,10 @@
 				/>
 
 				<!-- Fundamental data -->
-				{#if liveOnly}
+				{#if !fundamentalsAvailable}
 					<div class="card p-5 border-blue-400/20">
 						<h3 class="section-title">Fundamentals</h3>
-						<p class="text-xs text-terminal-muted">Not available — no live fundamentals provider is integrated yet. See <code class="text-terminal-secondary">providers/README.md</code>.</p>
+						<p class="text-xs text-terminal-muted">Not available — Screener.in has no page for this symbol either. See <code class="text-terminal-secondary">providers/README.md</code>.</p>
 					</div>
 				{:else}
 				<div class="card p-5">
@@ -222,7 +230,7 @@
 				{/if}
 
 				<!-- Institutional data -->
-				{#if liveOnly}
+				{#if !institutionalAvailable}
 					<div class="card p-5 border-blue-400/20">
 						<h3 class="section-title">Institutional Activity</h3>
 						<p class="text-xs text-terminal-muted">Not available — NSE's live shareholding/deals API is blocked by Akamai Bot Manager. See <code class="text-terminal-secondary">providers/README.md</code>.</p>
@@ -368,10 +376,11 @@
 					confidence={stock.dataConfidence}
 				/>
 
-				{#if !liveOnly}
+				{#if scoreAvailable}
 					<!-- Score breakdown -->
 					<ScoreBreakdown score={stock.score} history={stock.scoreHistory} />
-
+				{/if}
+				{#if narrativeAvailable}
 					<!-- Signal tags -->
 					<SignalTags tags={stock.tags} />
 
@@ -396,11 +405,11 @@
 					</div>
 					<div class="data-row text-xs">
 						<span>Quarterly Data</span>
-						<span class="font-mono">{liveOnly ? 'N/A' : stock.fundamental.quarterReported}</span>
+						<span class="font-mono">{fundamentalsAvailable ? stock.fundamental.quarterReported : 'N/A'}</span>
 					</div>
 					<div class="data-row text-xs">
 						<span>Shareholding</span>
-						<span class="font-mono">{liveOnly ? 'N/A' : 'Latest quarterly'}</span>
+						<span class="font-mono">{institutionalAvailable ? 'Latest quarterly' : 'N/A'}</span>
 					</div>
 					<div class="data-row text-xs border-0">
 						<span>Price Data</span>

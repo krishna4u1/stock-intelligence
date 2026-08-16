@@ -243,14 +243,18 @@ export interface StockAnalysis {
 	analysedAt: string;
 
 	/**
-	 * 'LIVE_TECHNICAL_ONLY' = price/technical are real (live provider), but
-	 * fundamental/institutional/fno/score/rating are NOT — no live provider
-	 * for those exists yet (see src/lib/providers/README.md). The zeroed
-	 * placeholder values in those fields must not be rendered as real data;
-	 * the UI checks this flag and shows an explicit "not available" state
-	 * instead. Omitted/undefined means 'FULL' (the original all-mock shape).
+	 * - 'LIVE_TECHNICAL_ONLY': price/technical are real; fundamental/
+	 *   institutional/fno/score/rating are NOT (zeroed placeholders — no
+	 *   live provider for those, see src/lib/providers/README.md). The UI
+	 *   must not render those fields as real data.
+	 * - 'LIVE_FUNDAMENTALS': price/technical/fundamentals (Screener.in) are
+	 *   real, and score/rating/signals ARE genuinely computed from them —
+	 *   but institutional activity has no live provider (scored as a
+	 *   neutral default, not a real signal — see missingData) and narrative
+	 *   tags/tier-checklists aren't generated for this path yet.
+	 * - undefined means 'FULL' (the original all-mock shape).
 	 */
-	dataMode?: 'FULL' | 'LIVE_TECHNICAL_ONLY';
+	dataMode?: 'FULL' | 'LIVE_FUNDAMENTALS' | 'LIVE_TECHNICAL_ONLY';
 }
 
 export interface ScoreHistory {
