@@ -68,7 +68,17 @@ export async function searchSymbols(query: string, limit = 8): Promise<SymbolEnt
 			return { entry, score };
 		})
 		.filter((s) => s.score > 0)
-		.sort((a, b) => b.score - a.score || a.entry.symbol.localeCompare(b.entry.symbol));
+		.sort((a, b) =>
+			b.score - a.score ||
+			// Within the same score tier (e.g. "SBI" prefix-matching SBIN,
+			// SBICARD, SBILIFE, and a dozen SBI-AMC ETF tickers), a shorter
+			// symbol is a tighter match — SBIN (4 chars) is what "SBI" almost
+			// certainly means, not SBIETFQLTY (10 chars). Without this,
+			// alphabetical order alone pushed SBIN past the result limit
+			// entirely, since it sorts after every other SBI*-prefixed ticker.
+			a.entry.symbol.length - b.entry.symbol.length ||
+			a.entry.symbol.localeCompare(b.entry.symbol)
+		);
 
 	return scored.slice(0, limit).map((s) => s.entry);
 }

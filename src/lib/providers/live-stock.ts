@@ -62,6 +62,11 @@ export const LIVE_ONLY_SYMBOLS: Record<string, LiveSymbolMeta> = {
 		symbol: 'DAMCAPITAL', name: 'DAM Capital Advisors Ltd',
 		sector: 'Financial Services', industry: 'Investment Banking',
 		exchange: 'NSE', marketCapType: 'SMALL', isFno: false
+	},
+	SBIN: {
+		symbol: 'SBIN', name: 'State Bank of India',
+		sector: 'Financial Services', industry: 'Public Sector Bank',
+		exchange: 'NSE', marketCapType: 'LARGE', isFno: true
 	}
 };
 
