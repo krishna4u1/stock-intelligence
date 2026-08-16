@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { Search, Bell, RefreshCw } from 'lucide-svelte';
+	import { goto } from '$app/navigation';
 	import type { MarketOverview } from '$lib/types';
 	import { formatPct, regimeConfig } from '$lib/utils';
 
@@ -41,7 +42,10 @@
 		open = false;
 		searchQuery = '';
 		results = [];
-		window.location.href = `/stocks/${symbol}`;
+		// Client-side nav — the detail page's reactive `$: if (symbol) loadStock(symbol)`
+		// (src/routes/(dashboard)/stocks/[symbol]/+page.svelte) re-fetches on every
+		// param change, so this genuinely re-fetches rather than just swapping the URL.
+		goto(`/stocks/${symbol}`);
 	}
 
 	function handleKeydown(e: KeyboardEvent) {

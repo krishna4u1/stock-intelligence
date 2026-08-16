@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { page } from '$app/stores';
-	import { onMount } from 'svelte';
 	import type { StockAnalysis } from '$lib/types';
 	import {
 		ratingConfig, formatPct, formatNumber, changePctColor,
@@ -19,16 +18,26 @@
 
 	$: symbol = $page.params.symbol;
 
-	onMount(async () => {
+	async function loadStock(sym: string) {
+		loading = true;
+		error = '';
+		stock = null;
 		try {
-			const res = await fetch(`/api/stocks/${symbol}`);
-			if (!res.ok) { error = `Stock ${symbol} not found`; loading = false; return; }
+			const res = await fetch(`/api/stocks/${sym}`);
+			if (!res.ok) { error = `Stock ${sym} not found`; loading = false; return; }
 			stock = await res.json();
 		} catch (e) {
 			error = 'Failed to load stock data';
 		}
 		loading = false;
-	});
+	}
+
+	// Re-runs on every change to the route param, not just once on mount.
+	// SvelteKit reuses this same page component instance when navigating
+	// directly between two /stocks/<symbol> URLs (same route, different
+	// param) — an onMount-only fetch would never refire there and the page
+	// would keep showing the previously selected stock under the new URL.
+	$: if (symbol) loadStock(symbol);
 
 	$: cfg = stock ? ratingConfig(stock.rating) : null;
 	$: regimeCfg = stock ? regimeConfig(stock.marketRegime) : null;
